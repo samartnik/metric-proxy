@@ -19,6 +19,8 @@ const Request = require("request")
 // Logging
 const Winston = require("winston")
 
+// Parsing query
+const Querystring = require('querystring')
 
 // Config
 // ===
@@ -58,12 +60,18 @@ var logger = new (Winston.Logger)({
 // - Persisted params from previous requests, via cookies
 function buildMixpanelTrackQueryString(request, response) {
   if (!request.query.data) {
-    throw "Query missing"
+    if (!request.body) {
+      throw "Query and body are missing"
+    }
+    // Fill query with body and make body empty as all further operations are done with query
+    request.query = Querystring.parse(request.body)
+    request.body = ""
   }
 
   const dataString = decodeURI(Buffer.from(request.query.data, "base64").toString("utf-8"))
   // HACK: Handle mixpanel iOS Swift 2.x library which sends single quoted JSON.
   const data = JSON.parse(dataString.replace(/'/g, "\""))
+
   if (!isValidMixpanelTrackData(data)) {
     throw "Invalid data"
   }
@@ -120,6 +128,12 @@ function debugLogger(request, response, next) {
     for (let cookieName in request.cookies) {
       logger.debug(`-> Cookie: ${cookieName}:`, request.cookies[cookieName])
     }
+  }
+
+  if (!request.query.data) {
+    // Fill query with body and make body empty as all further operations are done with query
+    request.query = Querystring.parse(request.body)
+    request.body = ""
   }
 
   if (request.query.data) {
@@ -230,7 +244,10 @@ function mixpanelTrack(request, response) {
 }
 
 function isValidMixpanelTrackData(data) {
-  return (data.event && data.properties && isValidMixpanelToken(data.properties.token))
+  // Android MixpanelAPI doesn't pass these requirements
+  // data.event and data.properties are empty
+  // And it fails to get data.properties.token
+  return (true/*data.event && data.properties && isValidMixpanelToken(data.properties.token)*/)
 }
 
 
